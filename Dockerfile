@@ -1,42 +1,36 @@
 FROM debian:bullseye-slim
 
+# Build arguments for username and password
+ARG USERNAME=debianuser
+ARG USERPASS=debianpass
+
 # Update and upgrade packages
 RUN apt-get update \
   && apt-get upgrade -yq \
-  && apt-get install -yq aptitude git make gcc cpp binutils bash-completion dnsutils \
+  && apt-get install -yq aptitude git make gcc cpp binutils bash-completion dnsutils openssh-server \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 
-# Install SSH server
-RUN apt-get update \
-  && apt-get install -yq openssh-server \
-  && apt-get clean \
-  && rm -rf /var/lib/apt/lists/*
+# Create user with provided credentials
+RUN useradd -m -s /bin/bash ${USERNAME} \
+  && echo "${USERNAME}:${USERPASS}" | chpasswd
 
-# Create SSH runtime directory
-RUN mkdir /var/run/sshd
+# Continue with SSH setup...
+RUN mkdir -p /home/${USERNAME}/.ssh \
+  && mkdir /var/run/sshd
 
-# Copy SSH authorized keys
-COPY authorized_keys /root/.ssh/authorized_keys
+COPY authorized_keys /home/${USERNAME}/.ssh/authorized_keys
+COPY utils/apt.sh /home/${USERNAME}/bin/apt.sh
 
-# Copy utilities
-COPY utils/apt.sh /root/bin/apt.sh
+RUN chmod +x /home/${USERNAME}/bin/*.sh \
+  && chown -R ${USERNAME}:${USERNAME} /home/${USERNAME}
 
-# Make scripts executable
-RUN chmod +x /root/bin/*.sh
+RUN echo 'export PATH=$HOME/bin:$PATH' >> /home/${USERNAME}/.bashrc
 
-# Add custom bin to PATH
-RUN echo 'export PATH=/root/bin:$PATH' >> /root/.bashrc
+RUN sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
 
-# SSH configuration
-RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
-
-# Environment settings
 ENV NOTVISIBLE "in users profile"
 RUN echo "export VISIBLE=now" >> /etc/profile
 
-# Expose SSH port
 EXPOSE 22
-
-# Start SSH daemon
 CMD ["/usr/sbin/sshd", "-D"]
