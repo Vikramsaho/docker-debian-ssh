@@ -1,37 +1,25 @@
-FROM debian:bookworm-slim
+FROM debian:bullseye-slim
 
-# Update and install base packages
+# Update and upgrade packages
 RUN apt-get update \
   && apt-get upgrade -yq \
-  && apt-get install -yq \
-    aptitude \
-    git \
-    make \
-    gcc \
-    cpp \
-    binutils \
-    bash-completion \
-    dnsutils \
-    curl \
-    wget \
-    vim \
-    htop \
-    net-tools \
-    iputils-ping \
-    openssh-server \
-    sudo \
+  && apt-get install -yq aptitude git make gcc cpp binutils bash-completion dnsutils \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 
-# Create necessary directories
-RUN mkdir -p /var/run/sshd \
-  && mkdir -p /root/.ssh \
-  && mkdir -p /root/bin
+# Install SSH server
+RUN apt-get update \
+  && apt-get install -yq openssh-server \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/*
+
+# Create SSH runtime directory
+RUN mkdir /var/run/sshd
 
 # Copy SSH authorized keys
 COPY authorized_keys /root/.ssh/authorized_keys
 
-# Copy utility scripts
+# Copy utilities
 COPY utils/apt.sh /root/bin/apt.sh
 
 # Make scripts executable
@@ -41,10 +29,9 @@ RUN chmod +x /root/bin/*.sh
 RUN echo 'export PATH=/root/bin:$PATH' >> /root/.bashrc
 
 # SSH configuration
-RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config \
-  && sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
+RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
 
-# Set environment variables
+# Environment settings
 ENV NOTVISIBLE "in users profile"
 RUN echo "export VISIBLE=now" >> /etc/profile
 
