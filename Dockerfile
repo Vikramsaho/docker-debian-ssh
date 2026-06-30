@@ -1,50 +1,41 @@
 FROM debian:bullseye-slim
 
+# Install SSH and Supervisor
 RUN apt-get update && \
-    apt-get install -y \
-        openssh-server \
-        supervisor \
-        ca-certificates \
-        curl \
-        wget \
-        bash-completion \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    apt-get install -y openssh-server supervisor ca-certificates && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /var/run/sshd \
-    && mkdir -p /root/.ssh \
-    && mkdir -p /var/log/supervisor \
-    && mkdir -p /root/bin
+# Create directories
+RUN mkdir -p /var/run/sshd /root/.ssh /var/log/supervisor
 
+# Copy authorized_keys
 COPY authorized_keys.txt /root/.ssh/authorized_keys
 
-RUN chmod 600 /root/.ssh/authorized_keys \
-    && chmod 700 /root/.ssh
+# Set permissions
+RUN chmod 600 /root/.ssh/authorized_keys && \
+    chmod 700 /root/.ssh
 
+# Configure SSH
 RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
     sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \
-    sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config && \
-    echo "AllowUsers root" >> /etc/ssh/sshd_config && \
-    echo "UsePAM yes" >> /etc/ssh/sshd_config
+    sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
 
 # CRITICAL FIX
-RUN sed -i 's/session\s*required\s*pam_loginuid.so/session optional pam_loginuid.so/g' /etc/pam.d/sshd
+RUN sed -i 's/session required pam_loginuid.so/session optional pam_loginuid.so/g' /etc/pam.d/sshd
 
-# Copy utils if they exist
-COPY utils/apt.sh /root/bin/apt.sh 2>/dev/null || true
-RUN chmod +x /root/bin/apt.sh 2>/dev/null || true
-
-RUN echo 'export PATH=/root/bin:$PATH' >> /root/.bashrc
-
+# Create supervisor config
 RUN echo "[supervisord]" > /etc/supervisor/conf.d/supervisord.conf && \
     echo "nodaemon=true" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "logfile=/var/log/supervisor/supervisord.log" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "pidfile=/var/run/supervisord.pid" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "" >> /etc/supervisor/conf.d/supervisord.conf && \
     echo "[program:sshd]" >> /etc/supervisor/conf.d/supervisord.conf && \
     echo "command=/usr/sbin/sshd -D -e" >> /etc/supervisor/conf.d/supervisord.conf && \
     echo "autostart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
-    echo "autorestart=true" >> /etc/supervisor/conf.d/supervisord.conf
-
-ENV NOTVISIBLE="in users profile"
-RUN echo "export VISIBLE=now" >> /etc/profile
+    echo "autorestart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "stdout_logfile=/var/log/supervisor/sshd.log" >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo "stderr_logfile=/var/log/supervisor/sshd-error.log" >> /etc/supervisor/conf.d/supervisord.conf
 
 EXPOSE 22
 
