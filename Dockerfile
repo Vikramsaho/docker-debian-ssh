@@ -1,45 +1,41 @@
-FROM debian:bookworm
+FROM debian:bullseye-slim
 
-ENV DEBIAN_FRONTEND=noninteractive
-
-RUN apt-get update && \
-    apt-get upgrade -y && \
-    apt-get install -y \
+# Install only essential packages
+RUN apt-get update \
+  && apt-get upgrade -yq \
+  && apt-get install -yq \
     openssh-server \
-    sudo \
-    curl \
-    wget \
-    git \
-    vim \
-    nano \
-    unzip \
-    zip \
-    htop \
-    net-tools \
-    iproute2 \
-    iputils-ping \
-    dnsutils \
     bash-completion \
-    ca-certificates && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+    ca-certificates \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /var/run/sshd
+# Create SSH run directory
+RUN mkdir /var/run/sshd
 
-RUN mkdir -p /root/.ssh
+# Copy SSH authorized keys
 COPY authorized_keys /root/.ssh/authorized_keys
-RUN chmod 700 /root/.ssh && \
-    chmod 600 /root/.ssh/authorized_keys
 
-COPY utils/apt.sh /root/bin/apt.sh
-RUN chmod +x /root/bin/apt.sh
+# Set proper permissions for SSH
+RUN chmod 600 /root/.ssh/authorized_keys \
+  && chmod 700 /root/.ssh
 
-ENV PATH="/root/bin:${PATH}"
+# SSH login fix - disable pam_loginuid requirement
+RUN sed -i 's/session\s*required\s*pam_loginuid.so/session optional pam_loginuid.so/g' /etc/pam.d/sshd
 
-RUN echo "PermitRootLogin prohibit-password" >> /etc/ssh/sshd_config && \
-    echo "PubkeyAuthentication yes" >> /etc/ssh/sshd_config && \
-    echo "PasswordAuthentication no" >> /etc/ssh/sshd_config
+# SSH configuration tweaks for better security
+RUN echo "PermitRootLogin yes" >> /etc/ssh/sshd_config \
+  && echo "PubkeyAuthentication yes" >> /etc/ssh/sshd_config \
+  && echo "PasswordAuthentication no" >> /etc/ssh/sshd_config \
+  && echo "ChallengeResponseAuthentication no" >> /etc/ssh/sshd_config \
+  && echo "UsePAM yes" >> /etc/ssh/sshd_config
 
+# Set environment variable
+ENV NOTVISIBLE "in users profile"
+RUN echo "export VISIBLE=now" >> /etc/profile
+
+# Expose SSH port
 EXPOSE 22
 
-CMD ["/usr/sbin/sshd","-D","-e"]
+# Start SSH daemon
+CMD ["/usr/sbin/sshd", "-D"]
