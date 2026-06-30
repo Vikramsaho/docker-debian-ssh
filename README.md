@@ -1,3 +1,3 @@
-# kali-ssh
+# debian-ssh
 
-Kali linux in docker with ssh and supervisor
+Debian linux in docker with ssh and supervisor
