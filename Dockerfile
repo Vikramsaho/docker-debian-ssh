@@ -1,42 +1,45 @@
-FROM debian:bullseye-slim
+FROM debian:bookworm
 
-# Install SSH and Supervisor
+ENV DEBIAN_FRONTEND=noninteractive
+
 RUN apt-get update && \
-    apt-get install -y openssh-server supervisor ca-certificates && \
+    apt-get upgrade -y && \
+    apt-get install -y \
+    openssh-server \
+    sudo \
+    curl \
+    wget \
+    git \
+    vim \
+    nano \
+    unzip \
+    zip \
+    htop \
+    net-tools \
+    iproute2 \
+    iputils-ping \
+    dnsutils \
+    bash-completion \
+    ca-certificates && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Create directories
-RUN mkdir -p /var/run/sshd /root/.ssh /var/log/supervisor
+RUN mkdir -p /var/run/sshd
 
-# Copy authorized_keys
-COPY authorized_keys.txt /root/.ssh/authorized_keys
+RUN mkdir -p /root/.ssh
+COPY authorized_keys /root/.ssh/authorized_keys
+RUN chmod 700 /root/.ssh && \
+    chmod 600 /root/.ssh/authorized_keys
 
-# Set permissions
-RUN chmod 600 /root/.ssh/authorized_keys && \
-    chmod 700 /root/.ssh
+COPY utils/apt.sh /root/bin/apt.sh
+RUN chmod +x /root/bin/apt.sh
 
-# Configure SSH
-RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
-    sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \
-    sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
+ENV PATH="/root/bin:${PATH}"
 
-# CRITICAL FIX
-RUN sed -i 's/session required pam_loginuid.so/session optional pam_loginuid.so/g' /etc/pam.d/sshd
-
-# Create supervisor config
-RUN echo "[supervisord]" > /etc/supervisor/conf.d/supervisord.conf && \
-    echo "nodaemon=true" >> /etc/supervisor/conf.d/supervisord.conf && \
-    echo "logfile=/var/log/supervisor/supervisord.log" >> /etc/supervisor/conf.d/supervisord.conf && \
-    echo "pidfile=/var/run/supervisord.pid" >> /etc/supervisor/conf.d/supervisord.conf && \
-    echo "" >> /etc/supervisor/conf.d/supervisord.conf && \
-    echo "[program:sshd]" >> /etc/supervisor/conf.d/supervisord.conf && \
-    echo "command=/usr/sbin/sshd -D -e" >> /etc/supervisor/conf.d/supervisord.conf && \
-    echo "autostart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
-    echo "autorestart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
-    echo "stdout_logfile=/var/log/supervisor/sshd.log" >> /etc/supervisor/conf.d/supervisord.conf && \
-    echo "stderr_logfile=/var/log/supervisor/sshd-error.log" >> /etc/supervisor/conf.d/supervisord.conf
+RUN echo "PermitRootLogin prohibit-password" >> /etc/ssh/sshd_config && \
+    echo "PubkeyAuthentication yes" >> /etc/ssh/sshd_config && \
+    echo "PasswordAuthentication no" >> /etc/ssh/sshd_config
 
 EXPOSE 22
 
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+CMD ["/usr/sbin/sshd","-D","-e"]
